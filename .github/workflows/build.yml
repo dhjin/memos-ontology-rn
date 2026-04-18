@@ -29,16 +29,36 @@ jobs:
       - name: Prebuild (generate native Android code)
         run: npx expo prebuild --platform android --no-install
 
+      - name: Force bundle JS in all builds
+        run: |
+          echo "BUNDLE_IN_DEBUG=true" >> android/gradle.properties
+          echo "bundleInDebug=true" >> android/gradle.properties
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK with bundled JS (no dev server needed)
+      - name: Generate debug keystore for release signing
+        run: |
+          keytool -genkey -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build release APK (standalone, no dev server)
         working-directory: android
-        run: ./gradlew assembleDebug -PbundleInDebug=true --no-daemon
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/debug.keystore \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android \
+            --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
